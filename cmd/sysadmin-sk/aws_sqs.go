@@ -17,6 +17,7 @@
 package main
 
 import (
+    "fmt"
     "errors"
     "github.com/spf13/cobra"
     sqsLibrary "github.com/raffs/sysadmin-sk/services/aws/sqs"
@@ -49,7 +50,7 @@ var awsConfig AwsGlobalConfig
  * The following command will provide the ability to move messages from one queue to another.
  */
 func SqsMoveCommand() *cobra.Command {
-    var maxNumberOfMessages      int64
+    var batchSize                int64
     var waitTimeSeconds          int64
     var visibilityTimeout        int64
     var filterString             string
@@ -64,10 +65,16 @@ func SqsMoveCommand() *cobra.Command {
                 return errors.New("Invalid number of arguments for aws-sqs move command. Use --help for details")
             }
 
+            // batch size needs to be: 0 < batchSize <= 10
+            if !(batchSize > 0 && batchSize <= 10) {
+                fmt.Println("The 'batch size' needs to be between 1 and 10")
+                return errors.New("Invalid number for batch size")
+            }
+
             moveOptions := &sqsLibrary.MoveMessageOptions{
                SourceQueueName: args[0],
                TargetQueueName: args[1],
-               MaxNumberOfMessages: maxNumberOfMessages,
+               BatchSize: batchSize,
                WaitTimeSeconds: waitTimeSeconds,
                VisibilityTimeout: visibilityTimeout,
                FilterString: filterString,
@@ -83,7 +90,7 @@ func SqsMoveCommand() *cobra.Command {
         },
     }
 
-    cmd.PersistentFlags().Int64VarP(&maxNumberOfMessages, "max-number-of-messages", "m", 10, "How many messages at a time")
+    cmd.PersistentFlags().Int64VarP(&batchSize, "batch-size", "b", 10, "How many messages at a time")
     cmd.PersistentFlags().Int64VarP(&waitTimeSeconds, "wait-time-seconds", "w", 0, "Wait until receive the message")
     cmd.PersistentFlags().Int64VarP(&visibilityTimeout, "visibility-timeout", "t", 10, "Message the visibility")
     cmd.PersistentFlags().BoolVarP(&KeepMessageOnSourceQueue, "keep-message-on-source-queue", "k", false, "Whether to keep the message from source queue")

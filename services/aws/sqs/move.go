@@ -18,6 +18,7 @@ package sqs
 
 import (
     "fmt"
+    "errors"
     "strconv"
 
     "github.com/aws/aws-sdk-go/aws"
@@ -34,7 +35,7 @@ type MoveMessageOptions struct {
     TargetQueueName           string    `type:"string" required:"true"`
 
     // Define the maximum number of messages to be processed at a time.
-    MaxNumberOfMessages       int64     `type:"int64" required:"false"`
+    BatchSize                 int64     `type:"int64" required:"false"`
 
     // TODO: Proper documentation of this here, please :)
     WaitTimeSeconds           int64     `type:"int64" required:"false"`
@@ -115,7 +116,10 @@ func MoveMessages(options *MoveMessageOptions) (error) {
 
     session, err := session.NewSessionWithOptions(sessionOpts)
     if err != nil {
-        panic(err)
+        fmt.Println("Unable to create new session with AWS")
+        fmt.Println("error message: ", err.Error())
+
+        return errors.New("Unable to initialize AWS session")
     }
 
     client := sqs.New(session)
@@ -129,12 +133,14 @@ func MoveMessages(options *MoveMessageOptions) (error) {
 
     sourceNumMessages, err := strconv.Atoi(*sourceQueueAttr.Attributes["ApproximateNumberOfMessages"])
     if err != nil {
-        panic(err)
+        fmt.Println("Failed when trying to convert messages from string to integer")
+        return errors.New("Failed to retrieve information from source queue")
     }
 
     targetNumMessages, err := strconv.Atoi(*targetQueueAttr.Attributes["ApproximateNumberOfMessages"])
     if err != nil {
-        panic(err)
+        fmt.Println("Failed when trying to convert messages from string to integer")
+        return errors.New("Failed to retrieve information from target queue")
     }
 
     // if there's no message, our job is done here, let's pack it and go home
@@ -147,10 +153,12 @@ func MoveMessages(options *MoveMessageOptions) (error) {
     // Displaying summary of queues
     fmt.Printf("Source Queue '%s' contains %d of messages\n", options.SourceQueueName, sourceNumMessages)
     fmt.Printf("Target Queue '%s' contains %d of messages\n", options.TargetQueueName, targetNumMessages)
+    fmt.Printf("Number of the batch size: %d\n", options.BatchSize)
+    fmt.Printf("\nStarting migrating, these could take a while: ")
 
     messageInOptions := &sqs.ReceiveMessageInput{
         QueueUrl: sourceQueue.QueueUrl,
-        MaxNumberOfMessages: aws.Int64(options.MaxNumberOfMessages),
+        MaxNumberOfMessages: aws.Int64(options.BatchSize),
         WaitTimeSeconds: aws.Int64(options.WaitTimeSeconds),
         VisibilityTimeout: aws.Int64(options.VisibilityTimeout),
         MessageAttributeNames: []*string{aws.String(sqs.QueueAttributeNameAll)},
@@ -172,26 +180,27 @@ func MoveMessages(options *MoveMessageOptions) (error) {
 
         messageIn, err := client.ReceiveMessage(messageInOptions)
         if err != nil {
-            panic(err)
+            return errors.New("Failed to receive message from source queue")
         }
 
         if len(messageIn.Messages) <= 0 {
-            break
+            break /* no messages receive, no actions to be done */
         }
 
+        // append each received message to the send and delete buffer
         for _, message := range messageIn.Messages {
-
-            // append the message to batchMessages to be send in batch
             mRequest := sqs.SendMessageBatchRequestEntry {
                 MessageAttributes: message.MessageAttributes,
                 MessageBody: message.Body,
                 Id: message.MessageId,
             }
 
-            sendBatchMessages = append(sendBatchMessages, &mRequest)
+            dRequest := sqs.DeleteMessageBatchRequestEntry{
+                Id: message.MessageId,
+                ReceiptHandle: message.ReceiptHandle,
+            }
 
-            // append the message to the delete list
-            dRequest := sqs.DeleteMessageBatchRequestEntry{Id: message.MessageId, ReceiptHandle: message.ReceiptHandle}
+            sendBatchMessages = append(sendBatchMessages, &mRequest)
             deleteBatchMessages = append(deleteBatchMessages, &dRequest)
         }
 
@@ -204,7 +213,9 @@ func MoveMessages(options *MoveMessageOptions) (error) {
         if err != nil {
             fmt.Println("Failed to send the message to target queue in batch mode")
             fmt.Println("We should abort this, as a sense something is wrong")
-            panic(err)
+            fmt.Println("API returned: ", err.Error())
+
+            return errors.New("Failed to send messages to target queue")
         }
 
         sendSuccessMsgs += int64(len(sendResult.Successful))
@@ -229,7 +240,8 @@ func MoveMessages(options *MoveMessageOptions) (error) {
             if err != nil {
                 fmt.Println("Failed to send the message to target queue in batch mode")
                 fmt.Println("We should abort this, as a sense something is wrong")
-                panic(err)
+
+                return errors.New("Failed to delete messages after sending to the target queue")
             }
 
             deleteSuccessMsgs += int64(len(deleteResult.Successful))
@@ -241,6 +253,7 @@ func MoveMessages(options *MoveMessageOptions) (error) {
 
     fmt.Printf("\n\nSummary\n")
     fmt.Printf("Migrated: %d successfully from source queue to target queue\n", sendSuccessMsgs)
+    fmt.Printf("During the migration %d messages had failed\n", sendFailedMsgs)
     fmt.Printf("Successfully sync/move all the messages, my done job is done here partner!\n")
     return nil   // return null because, there is no error to be return.
 }

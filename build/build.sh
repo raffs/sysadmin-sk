@@ -22,7 +22,19 @@ export GO_LDFLAGS="-s" # for building without symbols for debugging.
 function __sysadmin_sk_build() {
   echo "Starting building Sysadmin SK"
 
-  CGO_ENABLED=0 go build -installsuffix cgo -ldflags "$GO_LDFLAGS" -o "bin/sysadmin-sk"
+  if ! CGO_ENABLED=0 go build \
+          -gcflags -m \
+          -installsuffix cgo \
+          -ldflags "$GO_LDFLAGS" \
+          -o "${HOME}/.bin/sysadmin-sk"
+  then
+    echo
+    echo "Failed to compile the binary, please see message above"
+    exit 1
+  else
+    echo
+    echo "Successfully finish the build"
+  fi
 }
 
 # =============================================================================
