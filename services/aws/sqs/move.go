@@ -21,6 +21,7 @@ import (
     "errors"
     "strconv"
 
+    "github.com/spf13/cobra"
     "github.com/aws/aws-sdk-go/aws"
     "github.com/aws/aws-sdk-go/aws/session"
     "github.com/aws/aws-sdk-go/service/sqs"
@@ -63,6 +64,68 @@ type MoveMessageOptions struct {
 
     // Define the AWS profile
     AwsProfile               string     `type:"string" required:"false"`
+}
+
+/**
+ * Return the aws-sqs command in cobra format. Essentially, we should keep the
+ * logic short and move the heavy logic to another place.
+ *
+ * The following command will provide the ability to move messages from one queue to another.
+ */
+func SqsMoveCommand() *cobra.Command {
+    var batchSize                int64
+    var waitTimeSeconds          int64
+    var visibilityTimeout        int64
+    var filterString             string
+    var filterAttributes         string
+    var KeepMessageOnSourceQueue bool
+
+    cmd := &cobra.Command{
+        Use: "move",
+        Short: "Move all or part of the messages from on SQS to another",
+        RunE: func(cmd *cobra.Command, args []string) error {
+
+            if len(args) != 2 {
+                return errors.New("Invalid number of arguments for aws-sqs move command. Use --help for details")
+            }
+
+            // batch size needs to be: 0 < batchSize <= 10
+            if !(batchSize > 0 && batchSize <= 10) {
+                fmt.Println("The 'batch size' needs to be between 1 and 10")
+                return errors.New("Invalid number for batch size")
+            }
+
+            moveOptions := &MoveMessageOptions{
+               SourceQueueName: args[0],
+               TargetQueueName: args[1],
+               BatchSize: batchSize,
+               WaitTimeSeconds: waitTimeSeconds,
+               VisibilityTimeout: visibilityTimeout,
+               FilterString: filterString,
+               FilterAttributes: filterAttributes,
+               KeepMessageOnSourceQueue: KeepMessageOnSourceQueue,
+               AwsRegion: awsConfig.AwsRegion,
+               AwsEndpoint: awsConfig.AwsEndpoint,
+               AwsProfile: awsConfig.AwsProfile,
+            }
+
+            // way down we go
+            return MoveMessages(moveOptions)
+        },
+    }
+
+    cmd.PersistentFlags().Int64VarP(&batchSize, "batch-size", "b", 10, "How many messages at a time")
+    cmd.PersistentFlags().Int64VarP(&waitTimeSeconds, "wait-time-seconds", "w", 0, "Wait until receive the message")
+    cmd.PersistentFlags().Int64VarP(&visibilityTimeout, "visibility-timeout", "t", 10, "Message the visibility")
+    cmd.PersistentFlags().BoolVarP(&KeepMessageOnSourceQueue, "keep-message-on-source-queue", "k", false, "Whether to keep the message from source queue")
+    cmd.PersistentFlags().StringVar(&filterString, "filter-string", "", "Regex to filter out the message")
+    cmd.PersistentFlags().StringVar(&filterAttributes, "filter-attribute", "", "Map key=value to use when filter messages")
+    cmd.PersistentFlags().IntVarP(&awsConfig.LogLevel, "log-level", "l", 0, "define the log level when running the script")
+    cmd.PersistentFlags().StringVarP(&awsConfig.AwsRegion, "aws-region", "r", "", "define AWS region.")
+    cmd.PersistentFlags().StringVarP(&awsConfig.AwsProfile, "aws-profile", "p", "", "define AWS profile")
+    cmd.PersistentFlags().StringVarP(&awsConfig.AwsEndpoint, "aws-endpoint", "e", "", "Define the AWS API endpoint (usually for low-level and testing")
+
+    return cmd
 }
 
 /**
@@ -221,7 +284,7 @@ func MoveMessages(options *MoveMessageOptions) (error) {
         sendSuccessMsgs += int64(len(sendResult.Successful))
         sendFailedMsgs += int64(len(sendResult.Failed))
 
-        fmt.Printf(".")
+        fmt.Printf(".") // let's print one '.' for each sendBatch operation
 
         // Delete successfully migrated message from source queue
         if !options.KeepMessageOnSourceQueue && sendSuccessMsgs > 0 {
@@ -247,7 +310,7 @@ func MoveMessages(options *MoveMessageOptions) (error) {
             deleteSuccessMsgs += int64(len(deleteResult.Successful))
             deleteFailedMsgs += int64(len(deleteResult.Failed))
 
-            fmt.Printf(".")
+            fmt.Printf(".") // let's print one '.' for each delete operation
         }
     }
 
@@ -255,5 +318,6 @@ func MoveMessages(options *MoveMessageOptions) (error) {
     fmt.Printf("Migrated: %d successfully from source queue to target queue\n", sendSuccessMsgs)
     fmt.Printf("During the migration %d messages had failed\n", sendFailedMsgs)
     fmt.Printf("Successfully sync/move all the messages, my done job is done here partner!\n")
+
     return nil   // return null because, there is no error to be return.
 }

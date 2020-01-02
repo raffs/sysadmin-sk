@@ -18,27 +18,22 @@ package main
 
 import (
     "github.com/spf13/cobra"
-    "github.com/lithammer/dedent"
+
+    sqsLibrary "github.com/raffs/sysadmin-sk/services/aws/sqs"
 )
 
-func main() {
+/**
+ * Return the SQS main command from sysadmin sidekick tool
+ */
+func NewAwsSqsCommand() *cobra.Command {
 
     cmd := &cobra.Command{
-        Use: "sysadmin-sk",
-        Short: "You sysadmin sidekick toolkit",
-        SilenceUsage: true,
-        Long: dedent.Dedent(`
-            SysAdmin Sidekick Toolkit (aka: sysadmin-sk) is a set of feature to help
-            Day to Day sysadmin operations. Mostly cloud due to their nature of exposing
-            Infrastructure as Service though an API
-        `),
+        Use:   "aws-sqs",
+        Short: "Provides script for handling AWS SQS operational tasks",
     }
 
     cmd.ResetFlags()
+    cmd.AddCommand(sqsLibrary.SqsMoveCommand())
 
-    // registering sub-commands
-    cmd.AddCommand(NewVersionCommand())
-    cmd.AddCommand(NewAwsSqsCommand())
-
-    cmd.Execute()
+    return cmd
 }
