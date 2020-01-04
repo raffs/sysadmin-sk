@@ -44,15 +44,8 @@ type MoveMessageOptions struct {
     // Define the message visibility when ingesting the message to the target queue.
     VisibilityTimeout         int64     `type:"int64" required:"false"`
 
-    // Define a regex string to filter the message body.
-    FilterString              string    `type:"string" required:"false"`
-
     // Whether to delete a message from the source queue. default: false
     KeepMessageOnSourceQueue  bool   `type:"string" required:"false"`
-
-    // Define message attributes to filter which messages should be ingested
-    // into the target queue.
-    FilterAttributes          string    `type:"string" required:"false"`
 
     // Define the AWS Region to connect to. This essentially will be converted
     // to an URL with the region name.
@@ -73,12 +66,7 @@ type MoveMessageOptions struct {
  * The following command will provide the ability to move messages from one queue to another.
  */
 func SqsMoveCommand() *cobra.Command {
-    var batchSize                int64
-    var waitTimeSeconds          int64
-    var visibilityTimeout        int64
-    var filterString             string
-    var filterAttributes         string
-    var KeepMessageOnSourceQueue bool
+    var opts MoveMessageOptions
 
     cmd := &cobra.Command{
         Use: "move",
@@ -90,40 +78,26 @@ func SqsMoveCommand() *cobra.Command {
             }
 
             // batch size needs to be: 0 < batchSize <= 10
-            if !(batchSize > 0 && batchSize <= 10) {
+            if !(opts.BatchSize > 0 && opts.BatchSize <= 10) {
                 fmt.Println("The 'batch size' needs to be between 1 and 10")
                 return errors.New("Invalid number for batch size")
             }
 
-            moveOptions := &MoveMessageOptions{
-               SourceQueueName: args[0],
-               TargetQueueName: args[1],
-               BatchSize: batchSize,
-               WaitTimeSeconds: waitTimeSeconds,
-               VisibilityTimeout: visibilityTimeout,
-               FilterString: filterString,
-               FilterAttributes: filterAttributes,
-               KeepMessageOnSourceQueue: KeepMessageOnSourceQueue,
-               AwsRegion: awsConfig.AwsRegion,
-               AwsEndpoint: awsConfig.AwsEndpoint,
-               AwsProfile: awsConfig.AwsProfile,
-            }
+            opts.SourceQueueName = args[0]
+            opts.TargetQueueName = args[1]
 
             // way down we go
-            return MoveMessages(moveOptions)
+            return MoveMessages(&opts)
         },
     }
 
-    cmd.PersistentFlags().Int64VarP(&batchSize, "batch-size", "b", 10, "How many messages at a time")
-    cmd.PersistentFlags().Int64VarP(&waitTimeSeconds, "wait-time-seconds", "w", 0, "Wait until receive the message")
-    cmd.PersistentFlags().Int64VarP(&visibilityTimeout, "visibility-timeout", "t", 10, "Message the visibility")
-    cmd.PersistentFlags().BoolVarP(&KeepMessageOnSourceQueue, "keep-message-on-source-queue", "k", false, "Whether to keep the message from source queue")
-    cmd.PersistentFlags().StringVar(&filterString, "filter-string", "", "Regex to filter out the message")
-    cmd.PersistentFlags().StringVar(&filterAttributes, "filter-attribute", "", "Map key=value to use when filter messages")
-    cmd.PersistentFlags().IntVarP(&awsConfig.LogLevel, "log-level", "l", 0, "define the log level when running the script")
-    cmd.PersistentFlags().StringVarP(&awsConfig.AwsRegion, "aws-region", "r", "", "define AWS region.")
-    cmd.PersistentFlags().StringVarP(&awsConfig.AwsProfile, "aws-profile", "p", "", "define AWS profile")
-    cmd.PersistentFlags().StringVarP(&awsConfig.AwsEndpoint, "aws-endpoint", "e", "", "Define the AWS API endpoint (usually for low-level and testing")
+    cmd.PersistentFlags().Int64VarP(&opts.BatchSize, "batch-size", "b", 10, "How many messages at a time")
+    cmd.PersistentFlags().Int64VarP(&opts.WaitTimeSeconds, "wait-time-seconds", "w", 0, "Wait until receive the message")
+    cmd.PersistentFlags().Int64VarP(&opts.VisibilityTimeout, "visibility-timeout", "t", 10, "Message the visibility")
+    cmd.PersistentFlags().BoolVarP(&opts.KeepMessageOnSourceQueue, "keep-message-on-source-queue", "k", false, "Whether to keep the message from source queue")
+    cmd.PersistentFlags().StringVarP(&opts.AwsRegion, "aws-region", "r", "", "define AWS region.")
+    cmd.PersistentFlags().StringVarP(&opts.AwsProfile, "aws-profile", "p", "", "define AWS profile")
+    cmd.PersistentFlags().StringVarP(&opts.AwsEndpoint, "aws-endpoint", "e", "", "Define the AWS API endpoint (usually for low-level and testing")
 
     return cmd
 }
@@ -181,7 +155,6 @@ func MoveMessages(options *MoveMessageOptions) (error) {
     if err != nil {
         fmt.Println("Unable to create new session with AWS")
         fmt.Println("error message: ", err.Error())
-
         return errors.New("Unable to initialize AWS session")
     }
 

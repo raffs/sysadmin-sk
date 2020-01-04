@@ -4,8 +4,6 @@ package sqs
  * Aws Global Configuration shared between SQS sub-commands
  */
 type AwsGlobalConfig struct {
-    // Define the log level for the execution
-    LogLevel          int
 
     // Define which AWS region to connect to the service
     AwsRegion         string
