@@ -32,8 +32,14 @@ type MoveMessageOptions struct {
     // Define the Source Queue Name that will be move the message from.
     SourceQueueName           string    `type:"string" required:"true"`
 
+    // Define the Source Queue Name that will be move the message from.
+    SourceQueueUrl            string    `type:"string" required:"true"`
+
     // Define the target queue where the message will be moved to.
     TargetQueueName           string    `type:"string" required:"true"`
+
+    // Define the target queue where the message will be moved to.
+    TargetQueueUrl            string    `type:"string" required:"true"`
 
     // Define the maximum number of messages to be processed at a time.
     BatchSize                 int64     `type:"int64" required:"false"`
@@ -56,56 +62,17 @@ type MoveMessageOptions struct {
     AwsEndpoint               string     `type:"string" required:"false"`
 
     // Define the AWS profile
-    AwsProfile               string     `type:"string" required:"false"`
-}
+    AwsProfile                string     `type:"string" required:"false"`
 
-/**
- * Return the aws-sqs command in cobra format. Essentially, we should keep the
- * logic short and move the heavy logic to another place.
- *
- * The following command will provide the ability to move messages from one queue to another.
- */
-func SqsMoveCommand() *cobra.Command {
-    var opts MoveMessageOptions
-
-    cmd := &cobra.Command{
-        Use: "move",
-        Short: "Move all or part of the messages from on SQS to another",
-        RunE: func(cmd *cobra.Command, args []string) error {
-
-            if len(args) != 2 {
-                return errors.New("Invalid number of arguments for aws-sqs move command. Use --help for details")
-            }
-
-            // batch size needs to be: 0 < batchSize <= 10
-            if !(opts.BatchSize > 0 && opts.BatchSize <= 10) {
-                fmt.Println("The 'batch size' needs to be between 1 and 10")
-                return errors.New("Invalid number for batch size")
-            }
-
-            opts.SourceQueueName = args[0]
-            opts.TargetQueueName = args[1]
-
-            // way down we go
-            return MoveMessages(&opts)
-        },
-    }
-
-    cmd.PersistentFlags().Int64VarP(&opts.BatchSize, "batch-size", "b", 10, "How many messages at a time")
-    cmd.PersistentFlags().Int64VarP(&opts.WaitTimeSeconds, "wait-time-seconds", "w", 0, "Wait until receive the message")
-    cmd.PersistentFlags().Int64VarP(&opts.VisibilityTimeout, "visibility-timeout", "t", 10, "Message the visibility")
-    cmd.PersistentFlags().BoolVarP(&opts.KeepMessageOnSourceQueue, "keep-message-on-source-queue", "k", false, "Whether to keep the message from source queue")
-    cmd.PersistentFlags().StringVarP(&opts.AwsRegion, "aws-region", "r", "", "define AWS region.")
-    cmd.PersistentFlags().StringVarP(&opts.AwsProfile, "aws-profile", "p", "", "define AWS profile")
-    cmd.PersistentFlags().StringVarP(&opts.AwsEndpoint, "aws-endpoint", "e", "", "Define the AWS API endpoint (usually for low-level and testing")
-
-    return cmd
+    // Pointer to a ReceiptHandle
+    ReceiptHandlers           map[string]string  `type:"map[string]*string" required:"false"`
 }
 
 /**
  * Given a queue name return the URL. Just a wrapper because we need to use twice.
  */
 func getQueueUrl(client *sqs.SQS, queueName *string) (*sqs.GetQueueUrlOutput) {
+
     queue, err := client.GetQueueUrl(&sqs.GetQueueUrlInput{
         QueueName: aws.String(*queueName),
     })
@@ -122,6 +89,7 @@ func getQueueUrl(client *sqs.SQS, queueName *string) (*sqs.GetQueueUrlOutput) {
  * more important the approximate number of messages at the moment.
  */
 func getQueueAttributes(client *sqs.SQS, queueUrl *string) (*sqs.GetQueueAttributesOutput) {
+
     queue, err := client.GetQueueAttributes(&sqs.GetQueueAttributesInput{
         QueueUrl: aws.String(*queueUrl),
         AttributeNames: aws.StringSlice([]string{"All"}),
@@ -135,16 +103,13 @@ func getQueueAttributes(client *sqs.SQS, queueUrl *string) (*sqs.GetQueueAttribu
 }
 
 /**
- * Given a MoveMessageOptions struct with the proper source and target queue
- * along with additional options for fine control migration. And sync and/or move
- * all or the partially (see filters options) from source queue to target queue.
+ * Return a AWS SQS client.
  */
-func MoveMessages(options *MoveMessageOptions) (error) {
+func sqsClient(options *MoveMessageOptions) (*sqs.SQS, error) {
 
     sessionOpts := session.Options{
         SharedConfigState: session.SharedConfigEnable,
-
-        // aws configuration options
+        // aws configuration
         Config: aws.Config{
             Region: aws.String(options.AwsRegion),
             Endpoint: aws.String(options.AwsEndpoint),
@@ -153,16 +118,111 @@ func MoveMessages(options *MoveMessageOptions) (error) {
 
     session, err := session.NewSessionWithOptions(sessionOpts)
     if err != nil {
-        fmt.Println("Unable to create new session with AWS")
-        fmt.Println("error message: ", err.Error())
-        return errors.New("Unable to initialize AWS session")
+        fmt.Println("Unable to create new session with AWS with error: ", err.Error())
+        return nil, errors.New("Unable to initialize AWS session")
     }
 
-    client := sqs.New(session)
+    return sqs.New(session), nil
+}
+
+/**
+ * send message to the target SQS queue in batch mode
+ */
+func sendBatchMessages(client *sqs.SQS,
+    options *MoveMessageOptions,
+    receiveResponse *sqs.ReceiveMessageOutput) (*sqs.SendMessageBatchOutput, error) {
+    var sendBatchMessages []*sqs.SendMessageBatchRequestEntry
+
+    // append each received message to the send and delete buffer
+    for _, message := range receiveResponse.Messages {
+        mRequest := sqs.SendMessageBatchRequestEntry {
+            MessageAttributes: message.MessageAttributes,
+            MessageBody: message.Body,
+            Id: message.MessageId,
+        }
+
+        // keep a map between message ID and ReceiptHandle to be used when deleting the message
+        options.ReceiptHandlers[*message.MessageId] = *message.ReceiptHandle
+
+        // append message to the SendMessage array to be send in batch
+        sendBatchMessages = append(sendBatchMessages, &mRequest)
+    }
+
+    batchSendMessagesInput := &sqs.SendMessageBatchInput{
+        QueueUrl: &options.TargetQueueUrl,
+        Entries: sendBatchMessages,
+    }
+
+    sendResponse, err := client.SendMessageBatch(batchSendMessagesInput)
+    if err != nil {
+        fmt.Println("Failed to send the message to target queue in batch mode")
+        fmt.Println("We should abort this, as a sense something is wrong")
+        fmt.Println("API returned: ", err.Error())
+        return nil, errors.New("Failed to send messages to target queue")
+    }
+
+    fmt.Printf(".") // print a . (dot) for each send OP
+    return sendResponse, nil
+}
+
+/**
+ * delete message to the target SQS queue in batch mode
+ */
+func deleteBatchMessages(client *sqs.SQS,
+    options *MoveMessageOptions,
+    sendResponse *sqs.SendMessageBatchOutput) (int64, error) {
+
+    var err error
+    var deletedMsgs int64
+    var deleteBatchMessages []*sqs.DeleteMessageBatchRequestEntry
+
+    // append all successfully messages to be deleted.
+    for _, message := range sendResponse.Successful {
+        m := &sqs.DeleteMessageBatchRequestEntry{
+            Id: aws.String(*message.Id),
+            ReceiptHandle: aws.String(options.ReceiptHandlers[*message.Id]),
+        }
+
+        deleteBatchMessages = append(deleteBatchMessages, m)
+    }
+
+    batchDeleteMessagesInput := &sqs.DeleteMessageBatchInput{
+        QueueUrl: &options.SourceQueueUrl,
+        Entries: deleteBatchMessages,
+    }
+
+    deleteResult, err := client.DeleteMessageBatch(batchDeleteMessagesInput)
+    if err != nil {
+        fmt.Println("Failed to send the message to target queue in batch mode")
+        fmt.Println("We should abort this, as a sense something is wrong")
+
+        return 0, errors.New("Failed to delete messages after sending to the target queue")
+    }
+
+    deletedMsgs = int64(len(deleteResult.Successful))
+    fmt.Printf(".") // print a . (dot) for each send OP
+
+    return deletedMsgs, err
+}
+
+/**
+ * Given a MoveMessageOptions struct with the proper source and target queue
+ * along with additional options for fine control migration. And sync and/or move
+ * all or the partially (see filters options) from source queue to target queue.
+ */
+func MoveMessages(options *MoveMessageOptions) (error) {
+
+    client, err := sqsClient(options)
+    if err != nil {
+        return err
+    }
 
     // get Queue's url and related attributes
     sourceQueue := getQueueUrl(client, &options.SourceQueueName)
     targetQueue := getQueueUrl(client, &options.TargetQueueName)
+
+    options.SourceQueueUrl = *sourceQueue.QueueUrl
+    options.TargetQueueUrl = *targetQueue.QueueUrl
 
     sourceQueueAttr := getQueueAttributes(client, sourceQueue.QueueUrl)
     targetQueueAttr := getQueueAttributes(client, targetQueue.QueueUrl)
@@ -189,8 +249,8 @@ func MoveMessages(options *MoveMessageOptions) (error) {
     // Displaying summary of queues
     fmt.Printf("Source Queue '%s' contains %d of messages\n", options.SourceQueueName, sourceNumMessages)
     fmt.Printf("Target Queue '%s' contains %d of messages\n", options.TargetQueueName, targetNumMessages)
-    fmt.Printf("Number of the batch size: %d\n", options.BatchSize)
-    fmt.Printf("\nStarting migrating, these could take a while: ")
+    fmt.Printf("Number of the messages to be processed at a time: %d\n", options.BatchSize)
+    fmt.Printf("\nStarting migrating, these could take a while ")
 
     messageInOptions := &sqs.ReceiveMessageInput{
         QueueUrl: sourceQueue.QueueUrl,
@@ -203,94 +263,101 @@ func MoveMessages(options *MoveMessageOptions) (error) {
         },
     }
 
-    // Initialize the failed and succeed message counter
-    sendFailedMsgs := int64(0)
-    sendSuccessMsgs := int64(0)
-    deleteFailedMsgs := int64(0)
-    deleteSuccessMsgs := int64(0)
-
     // loop over all the message until we are done.
     for {
-        var sendBatchMessages []*sqs.SendMessageBatchRequestEntry
-        var deleteBatchMessages []*sqs.DeleteMessageBatchRequestEntry
-
-        messageIn, err := client.ReceiveMessage(messageInOptions)
+        receiveResponse, err := client.ReceiveMessage(messageInOptions)
         if err != nil {
             return errors.New("Failed to receive message from source queue")
         }
 
-        if len(messageIn.Messages) <= 0 {
+        if len(receiveResponse.Messages) <= 0 {
             break /* no messages receive, no actions to be done */
         }
 
-        // append each received message to the send and delete buffer
-        for _, message := range messageIn.Messages {
-            mRequest := sqs.SendMessageBatchRequestEntry {
-                MessageAttributes: message.MessageAttributes,
-                MessageBody: message.Body,
-                Id: message.MessageId,
-            }
-
-            dRequest := sqs.DeleteMessageBatchRequestEntry{
-                Id: message.MessageId,
-                ReceiptHandle: message.ReceiptHandle,
-            }
-
-            sendBatchMessages = append(sendBatchMessages, &mRequest)
-            deleteBatchMessages = append(deleteBatchMessages, &dRequest)
-        }
-
-        batchSendMessagesInput := &sqs.SendMessageBatchInput{
-            QueueUrl: targetQueue.QueueUrl,
-            Entries: sendBatchMessages,
-        }
-
-        sendResult, err := client.SendMessageBatch(batchSendMessagesInput)
+        sendResponse, err := sendBatchMessages(client, options, receiveResponse)
         if err != nil {
-            fmt.Println("Failed to send the message to target queue in batch mode")
-            fmt.Println("We should abort this, as a sense something is wrong")
-            fmt.Println("API returned: ", err.Error())
-
-            return errors.New("Failed to send messages to target queue")
+            return err
         }
-
-        sendSuccessMsgs += int64(len(sendResult.Successful))
-        sendFailedMsgs += int64(len(sendResult.Failed))
-
-        fmt.Printf(".") // let's print one '.' for each sendBatch operation
 
         // Delete successfully migrated message from source queue
-        if !options.KeepMessageOnSourceQueue && sendSuccessMsgs > 0 {
+        if !options.KeepMessageOnSourceQueue && len(sendResponse.Successful) > 0 {
 
-            // no succeed message to be deleted.
-            if len(deleteBatchMessages) <= 0 {
+            // if sendBatch does not return any successful message, no message do be deleted
+            if len(sendResponse.Successful) <= 0 {
                 continue
             }
 
-            batchDeleteMessagesInput := &sqs.DeleteMessageBatchInput{
-                QueueUrl: sourceQueue.QueueUrl,
-                Entries: deleteBatchMessages,
-            }
-
-            deleteResult, err := client.DeleteMessageBatch(batchDeleteMessagesInput)
+            // delete messages
+            _, err := deleteBatchMessages(client, options, sendResponse)
             if err != nil {
-                fmt.Println("Failed to send the message to target queue in batch mode")
-                fmt.Println("We should abort this, as a sense something is wrong")
-
-                return errors.New("Failed to delete messages after sending to the target queue")
+                return err
             }
-
-            deleteSuccessMsgs += int64(len(deleteResult.Successful))
-            deleteFailedMsgs += int64(len(deleteResult.Failed))
-
-            fmt.Printf(".") // let's print one '.' for each delete operation
         }
     }
 
-    fmt.Printf("\n\nSummary\n")
-    fmt.Printf("Migrated: %d successfully from source queue to target queue\n", sendSuccessMsgs)
-    fmt.Printf("During the migration %d messages had failed\n", sendFailedMsgs)
+    fmt.Printf("\n\n+ Summary:\n")
     fmt.Printf("Successfully sync/move all the messages, my done job is done here partner!\n")
 
     return nil   // return null because, there is no error to be return.
+}
+
+/**
+ * Validate the aws-sqs move arguments
+ */
+func validateArgs(options *MoveMessageOptions, args []string) error {
+
+    if len(args) != 2 {
+        return errors.New("Invalid number of arguments for aws-sqs move command. Use --help for details")
+    }
+
+    if options.BatchSize < 0 || options.BatchSize > 10 {
+        return errors.New("Invalid number for batch size, The 'batch size' needs to be between 1 and 10")
+    }
+
+    if options.WaitTimeSeconds < 0 || options.WaitTimeSeconds > 20 {
+        return errors.New("Invalid 'Wait Time Seconds', The 'wait time seconds' needs to be between 0 and 20")
+    }
+
+    if options.VisibilityTimeout < 0 || options.VisibilityTimeout > 43200 {
+        return errors.New("The 'visibility timeout' cannot be negative, needs to between 0 and 12 hours (43200 seconds)")
+    }
+
+    return nil
+}
+
+/**
+ * Return the aws-sqs command in cobra format. Essentially, we should keep the
+ * logic short and move the heavy logic to another place.
+ *
+ * The following command will provide the ability to move messages from one queue to another.
+ */
+func SqsMoveCommand() *cobra.Command {
+    var options MoveMessageOptions
+    options.ReceiptHandlers = make(map[string]string)
+
+    cmd := &cobra.Command{
+        Use: "move",
+        Short: "Move all or part of the messages from on SQS to another",
+        RunE: func(cmd *cobra.Command, args []string) error {
+
+            err := validateArgs(&options, args)
+            if err != nil {
+                return err
+            }
+
+            options.SourceQueueName = args[0]
+            options.TargetQueueName = args[1]
+            return MoveMessages(&options)
+        },
+    }
+
+    cmd.PersistentFlags().Int64VarP(&options.BatchSize, "batch-size", "b", 10, "How many messages at a time")
+    cmd.PersistentFlags().Int64VarP(&options.WaitTimeSeconds, "wait-time-seconds", "w", 0, "Wait until receive the message")
+    cmd.PersistentFlags().Int64VarP(&options.VisibilityTimeout, "visibility-timeout", "t", 10, "Message the visibility")
+    cmd.PersistentFlags().BoolVarP(&options.KeepMessageOnSourceQueue, "keep-message-on-source-queue", "k", false, "Whether to keep the message from source queue")
+    cmd.PersistentFlags().StringVarP(&options.AwsRegion, "aws-region", "r", "", "define AWS region.")
+    cmd.PersistentFlags().StringVarP(&options.AwsProfile, "aws-profile", "p", "", "define AWS profile")
+    cmd.PersistentFlags().StringVarP(&options.AwsEndpoint, "aws-endpoint", "e", "", "Define the AWS API endpoint (usually for low-level and testing")
+
+    return cmd
 }
