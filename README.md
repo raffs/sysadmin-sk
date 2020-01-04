@@ -38,3 +38,12 @@ cd $GOPATH/src/raffs
 git clone https://github.com/raffs/sysadmin-sk
 cd sysadmin-sk
 ```
+
+### Building
+
+To build `sysadmin-sk` command line binary:
+
+```sh
+cd $GOPATH/src/raffs/sysadmin-sk
+bash ../../build/build.sh
+```
