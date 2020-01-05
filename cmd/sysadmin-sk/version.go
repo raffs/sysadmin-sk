@@ -27,7 +27,8 @@ func NewVersionCommand() *cobra.Command {
 		Use:   "version",
 		Short: "Print the version of sysadmin-sk",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Version 0.0.1 alpha");
+
+			fmt.Println("Version 0.0.1-alpha");
 			return nil;
 		},
 	}
