@@ -19,6 +19,8 @@
 export REPO_PATH="github.com/raffs/sysadmin-sk"
 export GO_LDFLAGS="-s" # for building without symbols for debugging.
 
+[[ ! "${BIN_OUTPUT}" ]] && BIN_OUTPUT="${HOME}/.bin/sysadmin-sk"
+
 function __sysadmin_sk_build() {
   echo "Starting building Sysadmin SK"
 
@@ -26,7 +28,7 @@ function __sysadmin_sk_build() {
           -gcflags -m \
           -installsuffix cgo \
           -ldflags "$GO_LDFLAGS" \
-          -o "${HOME}/.bin/sysadmin-sk"
+          -o "${BIN_OUTPUT}"
   then
     echo
     echo "Failed to compile the binary, please see message above"
