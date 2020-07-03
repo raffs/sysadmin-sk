@@ -13,6 +13,7 @@ so **USE VERY CAREFULLY**.
 Currently, sysadmin-sk provides the following features:
 
 * **aws-sqs: move** - Migrate all the messages from one SQS queue to another
+* **aws-ecs: list** - List ECS services from a given cluster
 
 ## Contributing
 

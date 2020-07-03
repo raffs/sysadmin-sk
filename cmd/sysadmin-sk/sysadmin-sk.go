@@ -17,28 +17,26 @@
 package main
 
 import (
-    "github.com/spf13/cobra"
-    "github.com/lithammer/dedent"
+	"github.com/lithammer/dedent"
+	"github.com/spf13/cobra"
 )
 
 func main() {
 
-    cmd := &cobra.Command{
-        Use: "sysadmin-sk",
-        Short: "You sysadmin sidekick toolkit",
-        SilenceUsage: true,
-        Long: dedent.Dedent(`
+	cmd := &cobra.Command{
+		Use:          "sysadmin-sk",
+		Short:        "You sysadmin sidekick toolkit",
+		SilenceUsage: true,
+		Long: dedent.Dedent(`
             SysAdmin Sidekick Toolkit (aka: sysadmin-sk) is a set of feature to help
             Day to Day sysadmin operations. Mostly cloud due to their nature of exposing
             Infrastructure as Service though an API
         `),
-    }
+	}
 
-    cmd.ResetFlags()
-
-    // registering sub-commands
-    cmd.AddCommand(NewVersionCommand())
-    cmd.AddCommand(NewAwsSqsCommand())
-
-    cmd.Execute()
+	cmd.ResetFlags()
+	cmd.AddCommand(NewVersionCommand())
+	cmd.AddCommand(NewAwsSqsCommand())
+	cmd.AddCommand(NewAwsEcsCommand())
+	cmd.Execute()
 }
