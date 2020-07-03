@@ -1,4 +1,4 @@
-/*
+/**
  * This file is part of the Sysadmin Sidekick Toolkit (Sysadmin-SK) (https://github.com/raffs/sysadmin-sk).
  * Copyright (c) 2019 Rafael Oliveira Silva
  *
@@ -17,19 +17,19 @@
 package main
 
 import (
-    "fmt"
-    "github.com/spf13/cobra"
+	"fmt"
+
+	"github.com/spf13/cobra"
 )
 
+// NewVersionCommand returns the current built version
 func NewVersionCommand() *cobra.Command {
-
-    cmd := &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Print the version of sysadmin-sk",
 		RunE: func(cmd *cobra.Command, args []string) error {
-
-			fmt.Println("Version 0.0.1-alpha");
-			return nil;
+			fmt.Println("Version 0.0.1-alpha")
+			return nil
 		},
 	}
 
