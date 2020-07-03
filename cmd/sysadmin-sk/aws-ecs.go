@@ -19,18 +19,17 @@ package main
 import (
 	"github.com/spf13/cobra"
 
-	sqsLibrary "github.com/raffs/sysadmin-sk/services/aws/sqs"
+	ecsLibrary "github.com/raffs/sysadmin-sk/services/aws/ecs"
 )
 
-// NewAwsSqsCommand returns the SQS main command from sysadmin sidekick tool
-func NewAwsSqsCommand() *cobra.Command {
+// NewAwsEcsCommand return the SQS main command from sysadmin sidekick tool
+func NewAwsEcsCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "aws-sqs",
-		Short: "Provides script for handling AWS SQS operational tasks",
+		Use:   "aws-ecs",
+		Short: "Provides features for working with AWS ECS",
 	}
 
 	cmd.ResetFlags()
-	cmd.AddCommand(sqsLibrary.MoveCommand())
-
+	cmd.AddCommand(ecsLibrary.ListCommand())
 	return cmd
 }
