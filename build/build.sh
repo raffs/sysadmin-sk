@@ -42,4 +42,18 @@ function __sysadmin_sk_build() {
 # =============================================================================
 #  Main Script starts from here
 # =============================================================================
-__sysadmin_sk_build
+WKDIR="${PWD}/cmd/sysadmin-sk/"
+
+if ! test -d "${WKDIR}"
+then
+    echo "Working directory not found ${WKDIR}"
+    echo "Please make sure you are running this script from the root directory"
+    exit 2
+fi
+
+echo "Changing director to ${WKDIR} ..." && (
+    cd "${WKDIR}"
+    __sysadmin_sk_build
+)
+
+echo "Finished build"

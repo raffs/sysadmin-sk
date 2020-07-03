@@ -1,3 +1,4 @@
+# syntax = docker/dockerfile:1.0-experimental
 FROM golang:1.13.5
 
 # Set of labels recommended by the label-schema project
@@ -9,17 +10,13 @@ LABEL org.label-schema.vcs-url="https://github.com/raffs/sysadmin-sk"
 LABEL org.label-schema.version="0.0.1-alpha"
 LABEL org.label-schema.docker.cmd="docker run -it sysadmin-sk --help"
 
-# Define global env variables
 ENV GOPATH "/usr/share/sysadmin-sk"
-ENV PROJECT_DIR "${GOPATH}/src/github.com/raffs/sysadmin-sk"
 
-COPY . "${PROJECT_DIR}"
+COPY . "/usr/share/sysadmin-sk/src/github.com/raffs/sysadmin-sk"
+WORKDIR "/usr/share/sysadmin-sk/src/github.com/raffs/sysadmin-sk"
 
-WORKDIR "${PROJECT_DIR}"
-
-# building sysadmin-sk binary from cmd/sysadmin-sk
-RUN cd "${PROJECT_DIR}/cmd/sysadmin-sk" && \
-    BIN_OUTPUT=/usr/bin/sysadmin-sk "${PROJECT_DIR}/build/build.sh" && \
+RUN export BIN_OUTPUT=/usr/local/bin/sysadmin-sk && \
+    bash build/build.sh && \
     rm -rf "${GOPATH}"
 
-ENTRYPOINT ["/usr/bin/sysadmin-sk"]
+ENTRYPOINT ["/usr/local/bin/sysadmin-sk"]

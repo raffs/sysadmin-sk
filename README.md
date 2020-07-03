@@ -45,5 +45,13 @@ To build `sysadmin-sk` command line binary:
 
 ```sh
 cd $GOPATH/src/raffs/sysadmin-sk
-bash ../../build/build.sh
+build/build.sh                    # or $ bash build/build.sh
 ```
+
+Alternatively, we can build and run the `sysadmin-sk` from a docker container: 
+
+```sh
+docker build . -t sysadmin-sk:latest
+docker run -it sysadmin-sk: help
+```
+
