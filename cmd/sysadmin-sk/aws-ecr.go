@@ -1,4 +1,4 @@
-/*
+/**
  * This file is part of the Sysadmin Sidekick Toolkit (Sysadmin-SK) (https://github.com/raffs/sysadmin-sk).
  * Copyright (c) 2019 Rafael Oliveira Silva
  *
@@ -17,28 +17,20 @@
 package main
 
 import (
-	"github.com/lithammer/dedent"
 	"github.com/spf13/cobra"
+
+	ecrLibrary "github.com/raffs/sysadmin-sk/services/aws/ecr"
 )
 
-func main() {
-
+// NewAwsEcsCommand return the SQS main command from sysadmin sidekick tool
+func NewAwsEcrCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "sysadmin-sk",
-		Short:        "You sysadmin sidekick toolkit",
-		SilenceUsage: true,
-		Long: dedent.Dedent(`
-            SysAdmin Sidekick Toolkit (aka: sysadmin-sk) is a set of feature to help
-            Day to Day sysadmin operations. Mostly cloud due to their nature of exposing
-            Infrastructure as Service though an API
-        `),
+		Use:   "aws-ecr",
+		Short: "Provides features for working with AWS ECR",
 	}
 
 	cmd.ResetFlags()
-	cmd.AddCommand(NewVersionCommand())
-	cmd.AddCommand(NewAwsSqsCommand())
-	cmd.AddCommand(NewAwsEcsCommand())
-	cmd.AddCommand(NewAwsEcrCommand())
-	cmd.AddCommand(NewK8sCommand())
-	cmd.Execute()
+	cmd.AddCommand(ecrLibrary.ListImagesCommand())
+	return cmd
 }
+
