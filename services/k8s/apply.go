@@ -114,7 +114,7 @@ func applyManifest(options *K8sOptions) error {
 }
 
 func validateArgs(options *K8sOptions, args []string) error {
-	if len(args) != 1 {
+	if len(args) < 1 {
 		return errors.New("Invalid number of arguments for k8s apply manifest command. Use --help for details")
 	}
 
