@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"errors"
 	"github.com/spf13/cobra"
 	"io"
 	"io/ioutil"
@@ -21,6 +20,7 @@ import (
 	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/dynamic"
+	"github.com/raffs/sysadmin-sk/utils"
 )
 
 type K8sOptions struct {
@@ -113,14 +113,6 @@ func applyManifest(options *K8sOptions) error {
 	return nil
 }
 
-func validateArgs(options *K8sOptions, args []string) error {
-	if len(args) != 1 {
-		return errors.New("Invalid number of arguments for k8s apply manifest command. Use --help for details")
-	}
-
-	return nil
-}
-
 func ApplyManifest() *cobra.Command {
 	var options K8sOptions
 
@@ -128,7 +120,7 @@ func ApplyManifest() *cobra.Command {
 		Use:   "apply-manifest",
 		Short: "Apply an instantiated kubernetes manifest",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := validateArgs(&options, args)
+			err := utils.ValidateArgs(args)
 			if err != nil {
 				return err
 			}
