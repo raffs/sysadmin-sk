@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -94,4 +95,5 @@ func main() {
 	if err != io.EOF {
 		log.Fatal("eof ", err)
 	}
+	fmt.Println("Applied manifest at : " + filename)
 }

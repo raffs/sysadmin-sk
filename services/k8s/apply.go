@@ -109,6 +109,7 @@ func applyManifest(options *K8sOptions) error {
 		fmt.Println(err.Error())
 		return err
 	}
+	fmt.Println("*** Applied manifest at : " + options.manifestPath + " ***")
 	return nil
 }
 
