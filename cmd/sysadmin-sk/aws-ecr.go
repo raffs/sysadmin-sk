@@ -1,6 +1,7 @@
 /**
  * This file is part of the Sysadmin Sidekick Toolkit (Sysadmin-SK) (https://github.com/raffs/sysadmin-sk).
  * Copyright (c) 2019 Rafael Oliveira Silva
+ * Copyright (c) 2021 Mainak Dhar
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

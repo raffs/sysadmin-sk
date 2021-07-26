@@ -3,13 +3,13 @@ package ecr
 import (
 	"errors"
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/ecr"
 	"html/template"
 	"os"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/ecr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/spf13/cobra"
 )
